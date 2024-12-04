@@ -6,7 +6,8 @@ const createTodo = expressAsyncHandler(
   async (req: Request, res: Response, _: NextFunction) => {
     // @ts-ignore
     const user_id = req.user._id;
-    const { title, description, priority, due_date } = req.body;
+    const { title, description, priority, due_date, status, is_deleted } =
+      req.body;
     if (!title) {
       res.status(400);
       throw new Error('Title is a required Field');
@@ -17,6 +18,8 @@ const createTodo = expressAsyncHandler(
       description,
       priority,
       due_date,
+      is_deleted,
+      status,
     });
     const createdTodo = await todo.save();
     res.status(201).json({ createdTodo });
@@ -69,16 +72,32 @@ const getAllTodos = expressAsyncHandler(
     // @ts-ignore
     const user_id = req.user?._id;
     const deleted_status = req.query?.deleted_status as string | undefined;
-    const is_deleted = deleted_status === 'true';
+    const todoSearch = req.query?.todoSearch as string | undefined;
 
     if (!user_id) {
       res.status(400);
       throw new Error('Invalid User. Please Login and try again!');
     }
     const userId = new mongoose.Types.ObjectId(user_id);
-    const todos = await Todo.find({ user_id: userId ,is_deleted})
-      .populate('user_id', 'name email') // Populating user details (Only Email id and name)
-      .exec();
+
+    const query: any = { user_id: userId };
+
+    if (deleted_status != undefined && deleted_status.trim() !== '') {
+      query.is_deleted = deleted_status === 'true';
+    }
+
+    // If todoSearch is provided, add search conditions
+    if (todoSearch && todoSearch.trim() !== '') {
+      const searchRegex = new RegExp(todoSearch, 'i'); // Case-insensitive search
+      query.$or = [
+        { title: searchRegex },
+        { description: searchRegex },
+        { status: searchRegex },
+        { priority: searchRegex },
+      ];
+    }
+
+    const todos = await Todo.find(query);
 
     res.status(200).json({
       todos,
